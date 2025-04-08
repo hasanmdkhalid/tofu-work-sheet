@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tofu Work Sheet</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f2f2f2;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      background: white;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #999;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+    }
+    input, button {
+      padding: 8px;
+      margin: 5px;
+    }
+    .total {
+      margin-top: 20px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .button-group {
+      margin-top: 10px;
+    }
+    .delete-btn {
+      color: red;
+      cursor: pointer;
+    }
+    .image-preview {
+      max-width: 100px;
+      max-height: 100px;
+      margin: 5px;
+      cursor: pointer;
+    }
+    .image-modal {
+      display: none;
+      position: fixed;
+      z-index: 100;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.9);
+    }
+    .modal-content {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+    }
+    .modal-image {
+      max-width: 90%;
+      max-height: 90%;
+    }
+    .close {
+      position: absolute;
+      top: 15px;
+      right: 35px;
+      color: white;
+      font-size: 40px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Tofu Work Sheet</h2>
+
+  <label>Date: <input type="date" id="date"></label>
+  <label>Hours: <input type="number" id="hours" value="9"></label>
+  <label>Salary: <input type="number" id="salary" value="1100"></label>
+  <label>Bus Fare: <input type="number" id="fare" value="500"></label>
+  <label>Image: <input type="file" id="imageInput" accept="image/*"></label>
+  <button onclick="addData()">Add</button>
+
+  <div class="button-group">
+    <button onclick="downloadExcel()">Download Excel</button>
+    <button onclick="exportPDF()">Save as PDF</button>
+    <button onclick="clearData()">Clear All</button>
+  </div>
+
+  <table id="workTable">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Hours</th>
+        <th>Salary</th>
+        <th>Bus Fare</th>
+        <th>All Amount</th>
+        <th>Image</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="total">
+    Total Amount: <span id="totalAmount">0</span><br>
+    Total Hours: <span id="totalHours">0</span>
+  </div>
+
+  <!-- Image Modal -->
+  <div id="imageModal" class="image-modal">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <div class="modal-content">
+      <img id="modalImage" class="modal-image">
+    </div>
+  </div>
+
+  <script>
+    let totalAmount = 0;
+    let totalHours = 0;
+    let allData = [];
+
+    function loadSavedData() {
+      const saved = localStorage.getItem("tofuData");
+      if (saved) {
+        allData = JSON.parse(saved);
+        allData.forEach(row => {
+          addRowToTable(row);
+          totalAmount += row.amount;
+          totalHours += row.hours;
+        });
+        updateTotals();
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem("tofuData", JSON.stringify(allData));
+    }
+
+    function addData() {
+      const date = document.getElementById("date").value;
+      const hours = parseFloat(document.getElementById("hours").value) || 0;
+      const salary = parseFloat(document.getElementById("salary").value) || 0;
+      const fare = parseFloat(document.getElementById("fare").value) || 0;
+      const amount = (hours * salary) + fare;
+      const imageInput = document.getElementById("imageInput");
+      let imageData = null;
+
+      if (!date) {
+        alert("Please enter a date.");
+        return;
+      }
+
+      // Process image if selected
+      if (imageInput.files && imageInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          imageData = e.target.result;
+          const newRow = { date, hours, salary, fare, amount, image: imageData };
+          allData.push(newRow);
+          saveData();
+          addRowToTable(newRow);
+
+          totalAmount += amount;
+          totalHours += hours;
+          updateTotals();
+
+          document.getElementById("date").value = "";
+          imageInput.value = ""; // Clear file input
+        };
+        reader.readAsDataURL(imageInput.files[0]);
+      } else {
+        const newRow = { date, hours, salary, fare, amount, image: null };
+        allData.push(newRow);
+        saveData();
+        addRowToTable(newRow);
+
+        totalAmount += amount;
+        totalHours += hours;
+        updateTotals();
+
+        document.getElementById("date").value = "";
+      }
+    }
+
+    function addRowToTable(row) {
+      const table = document.getElementById("workTable").getElementsByTagName("tbody")[0];
+      const newRow = table.insertRow();
+      
+      const imageCellContent = row.image ? 
+        `<img src="${row.image}" class="image-preview" onclick="openModal('${row.image}')">` : 
+        "No image";
+      
+      newRow.innerHTML = `
+        <td contenteditable="true">${row.date}</td>
+        <td contenteditable="true">${row.hours}</td>
+        <td contenteditable="true">${row.salary}</td>
+        <td contenteditable="true">${row.fare}</td>
+        <td contenteditable="true">${row.amount.toFixed(2)}</td>
+        <td>${imageCellContent}</td>
+        <td><span class="delete-btn" onclick="deleteRow(this)">🗑️</span></td>
+      `;
+
+      newRow.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+        cell.addEventListener('input', function() {
+          updateRow(row, newRow);
+        });
+      });
+    }
+
+    function updateRow(row, newRow) {
+      row.date = newRow.cells[0].textContent;
+      row.hours = parseFloat(newRow.cells[1].textContent) || 0;
+      row.salary = parseFloat(newRow.cells[2].textContent) || 0;
+      row.fare = parseFloat(newRow.cells[3].textContent) || 0;
+      row.amount = (row.hours * row.salary) + row.fare;
+
+      newRow.cells[4].textContent = row.amount.toFixed(2);
+      
+      totalAmount = 0;
+      totalHours = 0;
+      allData.forEach(item => {
+        totalAmount += item.amount;
+        totalHours += item.hours;
+      });
+      updateTotals();
+      saveData();
+    }
+
+    function updateTotals() {
+      document.getElementById("totalAmount").textContent = totalAmount.toFixed(2);
+      document.getElementById("totalHours").textContent = totalHours.toFixed(2);
+    }
+
+    function deleteRow(btn) {
+      const row = btn.closest("tr");
+      const index = row.rowIndex - 1;  // Adjust to match data array index
+      allData.splice(index, 1);  // Remove row data from allData
+      saveData();
+      row.remove();
+
+      totalAmount = 0;
+      totalHours = 0;
+      allData.forEach(item => {
+        totalAmount += item.amount;
+        totalHours += item.hours;
+      });
+      updateTotals();
+    }
+
+    function downloadExcel() {
+      const wb = XLSX.utils.book_new();
+      const ws_data = [
+        ["Date", "Hours", "Salary", "Bus Fare", "All Amount"],
+        ...allData.map(row => [row.date, row.hours, row.salary, row.fare, row.amount])
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "WorkSheet");
+      XLSX.writeFile(wb, "Tofu_WorkSheet.xlsx");
+    }
+
+    function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Tofu Work Sheet", 10, 10);
+
+      let rows = [
+        ["Date", "Hours", "Salary", "Bus Fare", "All Amount"],
+        ...allData.map(row => [row.date, row.hours, row.salary, row.fare, row.amount.toFixed(2)])
+      ];
+
+      doc.autoTable({ head: rows.slice(0, 1), body: rows.slice(1) });
+      
+      // Add images to PDF (this is a simplified version)
+      let yPosition = doc.lastAutoTable.finalY + 10;
+      allData.forEach((row, index) => {
+        if (row.image) {
+          try {
+            doc.addImage(row.image, 'JPEG', 10, yPosition, 40, 40);
+            yPosition += 50;
+          } catch (e) {
+            console.error("Error adding image to PDF:", e);
+          }
+        }
+      });
+      
+      doc.save("Tofu_WorkSheet.pdf");
+    }
+
+    function clearData() {
+      if (confirm("Clear all data?")) {
+        localStorage.removeItem("tofuData");
+        location.reload();
+      }
+    }
+
+    function openModal(imageSrc) {
+      const modal = document.getElementById("imageModal");
+      const modalImg = document.getElementById("modalImage");
+      modal.style.display = "block";
+      modalImg.src = imageSrc;
+    }
+
+    function closeModal() {
+      document.getElementById("imageModal").style.display = "none";
+    }
+
+    // Close modal when clicking outside the image
+    window.onclick = function(event) {
+      const modal = document.getElementById("imageModal");
+      if (event.target == modal) {
+        modal.style.display = "none";
+      }
+    }
+
+    loadSavedData();
+  </script>
+</body>
+</html>
